@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Tabela Fotbal Live</title>
+    <!-- Librarie gratuita pentru conexiune live Laptop - Telefon -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --panel-bg: #1e293b;
+            --accent-green: #22c55e;
+            --accent-gold: #eab308;
+            --accent-red: #ef4444;
+            --text-main: #f8fafc;
+            --border-color: #334155;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Arial, sans-serif; }
+        body { background-color: transparent; color: var(--text-main); }
+
+        /* DASHBOARD LAPTOP */
+        #dashboard-view { background-color: #050811; min-height: 100vh; padding: 20px; }
+        .grid-container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media(max-width: 900px) { .grid-container { grid-template-columns: 1fr; } }
+
+        .card { background: var(--panel-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 20px; }
+        .card h2 { font-size: 18px; margin-bottom: 15px; color: var(--accent-green); display: flex; justify-content: space-between; align-items: center; }
+
+        .input-group { margin-bottom: 12px; }
+        .input-group label { display: block; font-size: 13px; color: #94a3b8; margin-bottom: 5px; }
+        .input-group input { width: 100%; padding: 10px; background: #0f172a; border: 1px solid var(--border-color); color: white; border-radius: 6px; }
+
+        .btn-row { display: flex; gap: 10px; margin-top: 10px; }
+        .btn { padding: 10px 15px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; flex: 1; text-align: center; }
+        .btn-green { background: var(--accent-green); color: black; }
+        .btn-red { background: var(--accent-red); color: white; }
+        .btn-gold { background: var(--accent-gold); color: black; }
+        .btn-slate { background: #475569; color: white; }
+        .btn:hover { opacity: 0.9; }
+
+        .sec-matches-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; max-height: 550px; overflow-y: auto; }
+        .sec-match-item { background: #0f172a; padding: 12px; border-radius: 8px; border: 1px solid var(--border-color); }
+
+        /* OVERLAY TELEFON (DOAR TABELA) */
+        #overlay-view {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 15px;
+            background: transparent; /* Transparent pt OBS / Prism */
+        }
+
+        /* Tabela Principala Compacta - Stil Pareri Neavizate */
+        .main-scoreboard {
+            display: flex;
+            align-items: center;
+            background: rgba(15, 23, 42, 0.95);
+            border: 2px solid #334155;
+            border-radius: 8px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+            overflow: hidden;
+            color: white;
+            min-width: 350px;
+            height: 52px;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .team-box { display: flex; align-items: center; gap: 8px; padding: 0 12px; flex: 1; font-weight: bold; font-size: 15px; text-transform: uppercase; }
+        .team-box.home { justify-content: flex-end; text-align: right; }
+        .team-box.away { justify-content: flex-start; text-align: left; }
+        .team-logo { width: 30px; height: 30px; object-fit: contain; }
+
+        .score-box { background: #000; padding: 0 14px; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 900; color: var(--accent-green); border-left: 2px solid #334155; border-right: 2px solid #334155; }
+        .timer-box { background: #1e293b; padding: 0 10px; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: bold; color: var(--accent-gold); min-width: 60px; }
+
+        /* Animatie Gol Subtila */
+        .main-scoreboard.goal-flash {
+            animation: pulse-gold 0.6s infinite alternate;
+            border-color: var(--accent-gold);
+        }
+        @keyframes pulse-gold {
+            from { box-shadow: 0 0 10px rgba(234, 179, 8, 0.5); }
+            to { box-shadow: 0 0 25px rgba(234, 179, 8, 1); }
+        }
+
+        .goal-text-overlay {
+            position: absolute;
+            top: -22px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--accent-gold);
+            color: black;
+            font-weight: 900;
+            padding: 2px 12px;
+            border-radius: 4px;
+            font-size: 11px;
+            display: none;
+            letter-spacing: 2px;
+        }
+        .main-scoreboard.goal-flash .goal-text-overlay { display: block; }
+
+        /* Tabela Rotativa Meciuri Secundare */
+        .ticker-wrapper {
+            margin-top: 8px;
+            background: rgba(15, 23, 42, 0.9);
+            border: 1px solid #334155;
+            border-radius: 6px;
+            padding: 5px 12px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 12px;
+            min-width: 320px;
+            justify-content: space-between;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+        }
+
+        .ticker-label { background: var(--accent-green); color: black; font-size: 9px; font-weight: 900; padding: 2px 5px; border-radius: 3px; }
+        .ticker-match-info { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+        .ticker-score { background: black; color: white; padding: 1px 5px; border-radius: 3px; font-weight: bold; }
+        .ticker-timer { color: var(--accent-gold); font-size: 11px; }
+
+        /* Ascundere automata */
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body>
+
+    <!-- VIZUALIZARE 1: PANOU CONTROL (DOAR PE LAPTOP) -->
+    <div id="dashboard-view">
+        <div style="background:#1e293b; padding:15px; border-radius:8px; margin-bottom:20px; border:1px solid #334155;">
+            <h3 style="color:var(--accent-gold); margin-bottom:8px;">🔗 Link Pentru Telefon (Prism Live / Streamlabs)</h3>
+            <p style="font-size:13px; color:#94a3b8; margin-bottom:10px;">Copiaza link-ul de mai jos si introdu-l pe telefon ca <strong>Browser Source</strong> ca sa se vada DOAR tabela:</p>
+            <input type="text" id="overlayUrlInput" readonly style="width:100%; padding:10px; background:#0f172a; color:var(--accent-green); border:1px solid #334155; border-radius:6px; font-weight:bold;">
+        </div>
+
+        <div class="grid-container">
+            <div>
+                <div class="card">
+                    <h2>⚽ Meci Principal (Live)</h2>
+                    <div class="input-group">
+                        <label>Echipa Gazdă & Siglă (URL)</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="text" id="homeName" value="FCSB" oninput="updateMainMatch()">
+                            <input type="text" id="homeLogo" value="https://via.placeholder.com/32/blue/white?text=FCSB" oninput="updateMainMatch()">
+                        </div>
+                    </div>
+                    <div class="input-group">
+                        <label>Echipa Oaspete & Siglă (URL)</label>
+                        <div style="display:flex; gap:5px;">
+                            <input type="text" id="awayName" value="DINAMO" oninput="updateMainMatch()">
+                            <input type="text" id="awayLogo" value="https://via.placeholder.com/32/red/white?text=DIN" oninput="updateMainMatch()">
+                        </div>
+                    </div>
+
+                    <div style="display:flex; gap:10px; margin-top:15px;">
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#94a3b8;">Scor Gazde</label>
+                            <div class="btn-row">
+                                <button class="btn btn-slate" onclick="changeScore('home', -1)">-</button>
+                                <button class="btn btn-green" onclick="changeScore('home', 1)">+1 Gol</button>
+                            </div>
+                        </div>
+                        <div style="flex:1;">
+                            <label style="font-size:12px; color:#94a3b8;">Scor Oaspeți</label>
+                            <div class="btn-row">
+                                <button class="btn btn-slate" onclick="changeScore('away', -1)">-</button>
+                                <button class="btn btn-green" onclick="changeScore('away', 1)">+1 Gol</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:15px;">
+                        <button class="btn btn-gold" style="width:100%; font-size:16px; padding:12px;" onclick="triggerGoal()">🚨 BUTON GOL (Animație + Sunet)</button>
+                    </div>
+
+                    <hr style="border-color:var(--border-color); margin:15px 0;">
+
+                    <label style="font-size:12px; color:#94a3b8;">Cronometru Meci Principal</label>
+                    <div class="btn-row">
+                        <button class="btn btn-green" onclick="startTimer('main')">▶ Start</button>
+                        <button class="btn btn-slate" onclick="pauseTimer('main')">⏸ Pauză</button>
+                        <button class="btn btn-red" onclick="resetTimer('main')">🔄 Reset (00:00)</button>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h2>⚙️ Opțiuni Tabela Rotativă</h2>
+                    <div class="input-group">
+                        <label>Interval Rotire Meciuri Secundare (Secunde)</label>
+                        <input type="number" id="rotateInterval" value="5" min="2" max="30" onchange="updateRotationInterval()">
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <div class="card">
+                    <h2>📋 Meciuri Secundare Rotative (15)</h2>
+                    <div class="sec-matches-grid" id="secMatchesContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- VIZUALIZARE 2: DOAR TABELA (PENTRU TELEFON / PRISM LIVE) -->
+    <div id="overlay-view" class="hidden">
+        <div class="main-scoreboard" id="mainScoreboard">
+            <div class="goal-text-overlay">GOOOOL!</div>
+            <div class="team-box home">
+                <span id="dispHomeName">FCSB</span>
+                <img id="dispHomeLogo" src="" class="team-logo">
+            </div>
+            <div class="score-box" id="dispScore">0 - 0</div>
+            <div class="team-box away">
+                <img id="dispAwayLogo" src="" class="team-logo">
+                <span id="dispAwayName">DINAMO</span>
+            </div>
+            <div class="timer-box" id="dispTimer">00:00</div>
+        </div>
+
+        <div class="ticker-wrapper" id="tickerWrapper" style="display:none;">
+            <span class="ticker-label">ALTE MECIURI</span>
+            <div class="ticker-match-info">
+                <span id="tickHome">CFR Cluj</span>
+                <span class="ticker-score" id="tickScore">1 - 0</span>
+                <span id="tickAway">Rapid</span>
+            </div>
+            <span class="ticker-timer" id="tickTimer">00:00</span>
+        </div>
+    </div>
+
+    <script>
+        // Verificăm dacă suntem pe Telefon (Overlay) sau Laptop (Dashboard)
+        const urlParams = new URLSearchParams(window.location.search);
+        const isOverlayMode = urlParams.get('view') === 'overlay';
+
+        let peer = null;
+        let conn = null;
+
+        // Starea meciurilor
+        let state = {
+            mainMatch: {
+                home: 'FCSB', homeLogo: 'https://via.placeholder.com/32/blue/white?text=FCSB',
+                away: 'DINAMO', awayLogo: 'https://via.placeholder.com/32/red/white?text=DIN',
+                scoreHome: 0, scoreAway: 0, seconds: 0, timerRunning: false
+            },
+            secondaryMatches: Array.from({ length: 15 }, (_, i) => ({
+                id: i + 1, enabled: i < 3, home: `Meci ${i + 1} A`, away: `Meci ${i + 1} B`,
+                scoreHome: 0, scoreAway: 0, seconds: 0, timerRunning: false
+            })),
+            rotateInterval: 5,
+            goalTriggered: false
+        };
+
+        let mainTimerId = null;
+        let tickerIntervalId = null;
+        let currentTickerIndex = 0;
+
+        window.onload = () => {
+            if (isOverlayMode) {
+                // TELEFON: Ascundem dashboard-ul și lăsăm doar Tabela
+                document.getElementById('dashboard-view').classList.add('hidden');
+                document.getElementById('overlay-view').classList.remove('hidden');
+                initPhoneReceiver();
+            } else {
+                // LAPTOP: Afișăm Panoul de Control
+                renderSecMatchesInputs();
+                initLaptopHost();
+                startMainTimerLoop();
+                startTickerLoop();
+            }
+        };
+
+        // CONNECTIONS (PeerJS Sync)
+        function initLaptopHost() {
+            peer = new Peer('tabela-live-host-1234'); // ID Fix Host
+            peer.on('open', (id) => {
+                let baseUrl = window.location.href.split('?')[0];
+                let overlayUrl = baseUrl + '?view=overlay';
+                document.getElementById('overlayUrlInput').value = overlayUrl;
+            });
+
+            peer.on('connection', (c) => {
+                conn = c;
+                sendStateToPhone();
+            });
+        }
+
+        function initPhoneReceiver() {
+            peer = new Peer();
+            peer.on('open', () => {
+                conn = peer.connect('tabela-live-host-1234');
+                conn.on('data', (data) => {
+                    state = data;
+                    renderOverlay();
+                });
+            });
+        }
+
+        function sendStateToPhone() {
+            if (conn && conn.open) {
+                conn.send(state);
+            }
+            renderOverlay();
+        }
+
+        // CONTROL LAPTOP
+        function updateMainMatch() {
+            state.mainMatch.home = document.getElementById('homeName').value;
+            state.mainMatch.away = document.getElementById('awayName').value;
+            state.mainMatch.homeLogo = document.getElementById('homeLogo').value;
+            state.mainMatch.awayLogo = document.getElementById('awayLogo').value;
+            sendStateToPhone();
+        }
+
+        function changeScore(team, val) {
+            if (team === 'home') state.mainMatch.scoreHome = Math.max(0, state.mainMatch.scoreHome + val);
+            if (team === 'away') state.mainMatch.scoreAway = Math.max(0, state.mainMatch.scoreAway + val);
+            if (val > 0) triggerGoal();
+            else sendStateToPhone();
+        }
+
+        function triggerGoal() {
+            state.goalTriggered = true;
+            sendStateToPhone();
+            playGoalSound();
+            setTimeout(() => {
+                state.goalTriggered = false;
+                sendStateToPhone();
+            }, 4000);
+        }
+
+        function startTimer(type) {
+            if (type === 'main') state.mainMatch.timerRunning = true;
+            sendStateToPhone();
+        }
+
+        function pauseTimer(type) {
+            if (type === 'main') state.mainMatch.timerRunning = false;
+            sendStateToPhone();
+        }
+
+        function resetTimer(type) {
+            if (type === 'main') {
+                state.mainMatch.timerRunning = false;
+                state.mainMatch.seconds = 0;
+            }
+            sendStateToPhone();
+        }
+
+        function startMainTimerLoop() {
+            setInterval(() => {
+                if (state.mainMatch.timerRunning) {
+                    state.mainMatch.seconds++;
+                    sendStateToPhone();
+                }
+                state.secondaryMatches.forEach((m, idx) => {
+                    if (m.timerRunning) {
+                        m.seconds++;
+                        let disp = document.getElementById(`secTimerDisp_${idx}`);
+                        if (disp) disp.innerText = formatTime(m.seconds);
+                    }
+                });
+            }, 1000);
+        }
+
+        // REDARE PE OVERLAY (TELEFON)
+        function renderOverlay() {
+            document.getElementById('dispHomeName').innerText = state.mainMatch.home;
+            document.getElementById('dispAwayName').innerText = state.mainMatch.away;
+            document.getElementById('dispHomeLogo').src = state.mainMatch.homeLogo;
+            document.getElementById('dispAwayLogo').src = state.mainMatch.awayLogo;
+            document.getElementById('dispScore').innerText = `${state.mainMatch.scoreHome} - ${state.mainMatch.scoreAway}`;
+            document.getElementById('dispTimer').innerText = formatTime(state.mainMatch.seconds);
+
+            const board = document.getElementById('mainScoreboard');
+            if (state.goalTriggered) board.classList.add('goal-flash');
+            else board.classList.remove('goal-flash');
+        }
+
+        function renderSecMatchesInputs() {
+            const container = document.getElementById('secMatchesContainer');
+            container.innerHTML = '';
+            state.secondaryMatches.forEach((m, idx) => {
+                container.innerHTML += `
+                    <div class="sec-match-item">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                            <label style="font-size:12px; color:white;">
+                                <input type="checkbox" ${m.enabled ? 'checked' : ''} onchange="toggleSecMatch(${idx}, this.checked)"> Meciul ${idx + 1}
+                            </label>
+                            <span style="font-size:11px; color:var(--accent-gold);" id="secTimerDisp_${idx}">00:00</span>
+                        </div>
+                        <div style="display:flex; gap:4px;">
+                            <input type="text" value="${m.home}" style="width:40%; font-size:10px;" onchange="updateSecMatchInfo(${idx}, 'home', this.value)">
+                            <input type="number" value="${m.scoreHome}" style="width:18%; font-size:10px;" onchange="updateSecMatchInfo(${idx}, 'scoreHome', parseInt(this.value))">
+                            <input type="number" value="${m.scoreAway}" style="width:18%; font-size:10px;" onchange="updateSecMatchInfo(${idx}, 'scoreAway', parseInt(this.value))">
+                            <input type="text" value="${m.away}" style="width:40%; font-size:10px;" onchange="updateSecMatchInfo(${idx}, 'away', this.value)">
+                        </div>
+                        <div class="btn-row" style="margin-top:4px;">
+                            <button class="btn btn-green" style="font-size:9px; padding:3px;" onclick="startSecTimer(${idx})">▶</button>
+                            <button class="btn btn-slate" style="font-size:9px; padding:3px;" onclick="pauseSecTimer(${idx})">⏸</button>
+                        </div>
+                    </div>
+                `;
+            });
+        }
+
+        function toggleSecMatch(idx, val) { state.secondaryMatches[idx].enabled = val; sendStateToPhone(); }
+        function updateSecMatchInfo(idx, field, val) { state.secondaryMatches[idx][field] = val; sendStateToPhone(); }
+        function startSecTimer(idx) { state.secondaryMatches[idx].timerRunning = true; sendStateToPhone(); }
+        function pauseSecTimer(idx) { state.secondaryMatches[idx].timerRunning = false; sendStateToPhone(); }
+
+        function startTickerLoop() {
+            if (tickerIntervalId) clearInterval(tickerIntervalId);
+            tickerIntervalId = setInterval(() => {
+                let enabledMatches = state.secondaryMatches.filter(m => m.enabled);
+                const wrapper = document.getElementById('tickerWrapper');
+
+                if (enabledMatches.length === 0) {
+                    wrapper.style.display = 'none';
+                    return;
+                }
+
+                wrapper.style.display = 'flex';
+                currentTickerIndex = (currentTickerIndex + 1) % enabledMatches.length;
+                let activeMatch = enabledMatches[currentTickerIndex];
+
+                document.getElementById('tickHome').innerText = activeMatch.home;
+                document.getElementById('tickAway').innerText = activeMatch.away;
+                document.getElementById('tickScore').innerText = `${activeMatch.scoreHome} - ${activeMatch.scoreAway}`;
+                document.getElementById('tickTimer').innerText = formatTime(activeMatch.seconds);
+            }, state.rotateInterval * 1000);
+        }
+
+        function updateRotationInterval() {
+            state.rotateInterval = parseInt(document.getElementById('rotateInterval').value);
+            startTickerLoop();
+        }
+
+        function formatTime(sec) {
+            let m = Math.floor(sec / 60);
+            let s = sec % 60;
+            return `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
+        }
+
+        function playGoalSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(440, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.5);
+                gain.gain.setValueAtTime(0.3, ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.5);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start();
+                osc.stop(ctx.currentTime + 0.5);
+            } catch(e) {}
+        }
+    </script>
+</body>
+</html>
